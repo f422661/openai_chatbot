@@ -1,4 +1,20 @@
 services:
+  api:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://rag_user:rag_password@postgres:5432/rag_db
+      DOCUMENTS_DIR: /app/documents
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./documents:/app/documents
+      - huggingface_cache:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: pgvector/pgvector:pg16
     environment:
@@ -20,7 +36,9 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:
+  huggingface_cache:

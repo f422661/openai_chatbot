@@ -65,7 +65,7 @@ pip install -r requirements.txt
 Create your local `.env` file:
 
 ```bash
-cp .env.example .env
+touch .env
 ```
 
 Edit `.env`:
@@ -74,7 +74,7 @@ Edit `.env`:
 DATABASE_URL=postgresql+psycopg://rag_user:rag_password@localhost:5432/rag_db
 OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 TOP_K=5
 ```
 
@@ -110,6 +110,36 @@ The API will run at:
 
 ```text
 http://127.0.0.1:8000
+```
+
+## Run with Docker Compose
+
+This starts FastAPI, PostgreSQL + pgvector, and Adminer together:
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+```text
+FastAPI:  http://127.0.0.1:8000
+Swagger:  http://127.0.0.1:8000/docs
+Adminer:  http://127.0.0.1:8080
+Postgres: localhost:5432
+```
+
+Inside Docker Compose, the API connects to PostgreSQL through:
+
+```text
+postgresql+psycopg://rag_user:rag_password@postgres:5432/rag_db
+```
+
+Initialize and ingest through the API container:
+
+```bash
+docker compose run --rm api python init_db.py
+docker compose run --rm api python ingest.py
 ```
 
 ## View Database in Browser
