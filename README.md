@@ -111,6 +111,34 @@ The API will run at:
 http://127.0.0.1:8000
 ```
 
+## View Database in Browser
+
+This project includes Adminer, a simple web UI for PostgreSQL.
+
+Start services:
+
+```bash
+docker compose up -d
+```
+
+Open:
+
+```text
+http://127.0.0.1:8080
+```
+
+Login with:
+
+```text
+System: PostgreSQL
+Server: postgres
+Username: rag_user
+Password: rag_password
+Database: rag_db
+```
+
+After logging in, open the `document_chunks` table to view ingested chunks and embeddings.
+
 ## API Usage
 
 ### Health Check
