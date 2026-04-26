@@ -11,5 +11,9 @@ def get_embedding_model() -> SentenceTransformer:
 
 
 def embed_text(text: str) -> list[float]:
-    embedding = get_embedding_model().encode(text, normalize_embeddings=True)
+    embedding = get_embedding_model().encode(
+        [str(text)],
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+    )[0]
     return embedding.tolist()
