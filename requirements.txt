@@ -6,3 +6,4 @@ psycopg[binary]
 sentence-transformers
 python-dotenv
 pydantic
+pypdf

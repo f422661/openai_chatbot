@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pypdf import PdfReader
 from sqlalchemy import text
 
 from config import DOCUMENTS_DIR
@@ -9,7 +10,7 @@ from embeddings import embed_text
 
 CHUNK_SIZE = 900
 CHUNK_OVERLAP = 150
-SUPPORTED_EXTENSIONS = {".md", ".txt"}
+SUPPORTED_EXTENSIONS = {".md", ".pdf", ".txt"}
 
 
 def chunk_text(content: str) -> list[str]:
@@ -30,12 +31,30 @@ def chunk_text(content: str) -> list[str]:
     return chunks
 
 
+def read_document(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".md", ".txt"}:
+        return path.read_text(encoding="utf-8").strip()
+
+    if suffix == ".pdf":
+        reader = PdfReader(path)
+        pages = []
+        for page_number, page in enumerate(reader.pages, start=1):
+            text = page.extract_text() or ""
+            text = text.strip()
+            if text:
+                pages.append(f"[{path.name} page {page_number}]\n{text}")
+        return "\n\n".join(pages).strip()
+
+    return ""
+
+
 def iter_document_chunks(documents_dir: Path) -> list[str]:
     chunks: list[str] = []
     for path in sorted(documents_dir.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             continue
-        content = path.read_text(encoding="utf-8").strip()
+        content = read_document(path)
         if not content:
             continue
         chunks.extend(chunk_text(content))

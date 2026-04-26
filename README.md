@@ -14,7 +14,7 @@ User -> POST /chat -> FastAPI -> Embedding -> pgvector search -> Prompt -> OpenA
 - 使用 `sentence-transformers/all-MiniLM-L6-v2` 產生 384 維 embedding
 - 使用 PostgreSQL + pgvector 做相似度搜尋
 - 使用 OpenAI Responses API 產生回答
-- 支援匯入 `documents/` 裡的 `.txt` 與 `.md` 文件
+- 支援匯入 `documents/` 裡的 `.txt`、`.md` 與文字型 `.pdf` 文件
 
 ## Project Structure
 
@@ -148,13 +148,14 @@ Example response:
 
 ## Add Your Own Documents
 
-Put `.txt` or `.md` files into the `documents/` folder:
+Put `.txt`, `.md`, or text-based `.pdf` files into the `documents/` folder:
 
 ```text
 documents/
 ├── example.md
 ├── product_faq.md
-└── company_policy.txt
+├── company_policy.txt
+└── user_manual.pdf
 ```
 
 Then run:
@@ -172,6 +173,8 @@ python ingest.py
 5. Insert new chunks into PostgreSQL
 
 After ingesting, call `/chat` again to ask questions about the new documents.
+
+PDF support uses `pypdf` text extraction. It works for PDFs that contain selectable text. Scanned image PDFs require OCR and are not supported by default.
 
 ## Database
 
