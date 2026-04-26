@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
 
 from config import OPENAI_API_KEY, OPENAI_MODEL, TOP_K
-from db import fetch_top_chunks
+from db import fetch_top_chunks, fetch_top_matches
 from embeddings import embed_text
 
 
@@ -17,6 +17,23 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     context: list[str]
+
+
+class RetrieveRequest(BaseModel):
+    question: str = Field(..., min_length=1)
+    top_k: int = Field(default=TOP_K, ge=1, le=20)
+
+
+class RetrievedChunk(BaseModel):
+    id: int
+    content: str
+    distance: float
+
+
+class RetrieveResponse(BaseModel):
+    question: str
+    top_k: int
+    matches: list[RetrievedChunk]
 
 
 def build_prompt(question: str, context_chunks: list[str]) -> str:
@@ -55,3 +72,16 @@ def chat(request: ChatRequest) -> ChatResponse:
     )
 
     return ChatResponse(answer=response.output_text, context=context_chunks)
+
+
+@app.post("/retrieve", response_model=RetrieveResponse)
+def retrieve(request: RetrieveRequest) -> RetrieveResponse:
+    question = request.question.strip()
+    question_embedding = embed_text(question)
+    matches = fetch_top_matches(question_embedding, request.top_k)
+
+    return RetrieveResponse(
+        question=question,
+        top_k=request.top_k,
+        matches=matches,
+    )

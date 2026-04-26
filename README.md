@@ -11,6 +11,7 @@ User -> POST /chat -> FastAPI -> Embedding -> pgvector search -> Prompt -> OpenA
 ## Features
 
 - `POST /chat` 問答 API
+- `POST /retrieve` 顯示最相近的 RAG chunks，不呼叫 OpenAI
 - 使用 `sentence-transformers/all-MiniLM-L6-v2` 產生 384 維 embedding
 - 使用 PostgreSQL + pgvector 做相似度搜尋
 - 使用 OpenAI Responses API 產生回答
@@ -170,6 +171,32 @@ Example response:
   "answer": "這個 API 使用 FastAPI、PostgreSQL pgvector、sentence-transformers 和 OpenAI Responses API。",
   "context": [
     "Simple RAG API 是一個使用 FastAPI、PostgreSQL pgvector..."
+  ]
+}
+```
+
+### Retrieve Similar Chunks
+
+Use this endpoint to inspect the most similar RAG chunks without calling OpenAI:
+
+```bash
+curl -X POST http://127.0.0.1:8000/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{"question":"selection sort 是什麼？","top_k":3}'
+```
+
+Example response:
+
+```json
+{
+  "question": "selection sort 是什麼？",
+  "top_k": 3,
+  "matches": [
+    {
+      "id": 259,
+      "content": "selection sort...",
+      "distance": 0.32
+    }
   ]
 }
 ```
