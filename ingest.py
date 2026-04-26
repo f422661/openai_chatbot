@@ -1,4 +1,5 @@
 from pathlib import Path
+import unicodedata
 
 from pypdf import PdfReader
 from sqlalchemy import text
@@ -13,8 +14,21 @@ CHUNK_OVERLAP = 150
 SUPPORTED_EXTENSIONS = {".md", ".pdf", ".txt"}
 
 
+def clean_text(content: str) -> str:
+    cleaned = []
+    for character in unicodedata.normalize("NFKC", content):
+        codepoint = ord(character)
+        if 0xD800 <= codepoint <= 0xDFFF:
+            continue
+        if unicodedata.category(character).startswith("C") and character not in "\n\t":
+            continue
+        cleaned.append(character)
+    return "".join(cleaned)
+
+
 def chunk_text(content: str) -> list[str]:
-    normalized = "\n".join(line.strip() for line in content.splitlines())
+    normalized = clean_text(content)
+    normalized = "\n".join(line.strip() for line in normalized.splitlines())
     normalized = "\n".join(part for part in normalized.splitlines() if part)
 
     chunks: list[str] = []
