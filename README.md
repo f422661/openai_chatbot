@@ -2,17 +2,52 @@
 
 一個最小可用的 RAG backend 範例，使用 FastAPI、PostgreSQL + pgvector、sentence-transformers 與 OpenAI Responses API，並整合 LINE Messaging API 機器人。
 
-使用流程（REST API）：
+## 系統架構
 
-```text
-User -> POST /chat -> FastAPI -> Embedding -> pgvector search -> Prompt -> OpenAI -> Answer
-```
+```mermaid
+graph TB
+    subgraph Users["使用者"]
+        U["REST Client\n(curl / Swagger)"]
+        LU["LINE User"]
+    end
 
-使用流程（LINE Bot）：
+    LP["LINE Platform\n(LINE Messaging API)"]
 
-```text
-LINE User -> LINE Platform -> POST /line/callback -> Signature check
-         -> Embedding -> pgvector search -> Prompt -> OpenAI -> Reply Message
+    subgraph Docker["Docker Compose"]
+        subgraph API["FastAPI  :8000"]
+            CH["POST /chat"]
+            RT["POST /retrieve"]
+            CB["POST /line/callback\nHMAC 驗簽"]
+        end
+        PG[("PostgreSQL + pgvector\ndocument_chunks\nvector(384)")]
+        ADM["Adminer  :8080"]
+    end
+
+    ST["sentence-transformers\nparaphrase-multilingual-MiniLM-L12-v2"]
+    OAI["OpenAI\nResponses API"]
+
+    subgraph Ingest["文件匯入"]
+        DOCS["documents/\n.txt  .md  .pdf"]
+        ING["ingest.py"]
+    end
+
+    U -- "POST /chat" --> CH
+    U -- "POST /retrieve" --> RT
+    LU -- "傳送訊息" --> LP
+    LP -- "webhook + X-Line-Signature" --> CB
+
+    CH & RT & CB -- "embed question" --> ST
+    ST -- "384-dim vector" --> PG
+    PG -- "top-K chunks" --> CH & RT & CB
+
+    CH & CB -- "prompt + context" --> OAI
+    OAI -- "answer" --> CH
+    OAI -- "answer" --> CB
+    CB -- "reply_message()" --> LP
+    LP -- "回覆訊息" --> LU
+
+    DOCS --> ING --> PG
+    ADM -. "browse" .-> PG
 ```
 
 ## Features
