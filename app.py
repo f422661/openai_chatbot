@@ -1,13 +1,27 @@
 from openai import OpenAI
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Request
 
-from config import OPENAI_API_KEY, OPENAI_MODEL, TOP_K
+from linebot.v3 import WebhookHandler
+from linebot.v3.messaging import (
+    ApiClient,
+    Configuration,
+    MessagingApi,
+    ReplyMessageRequest,
+    TextMessage,
+)
+from linebot.v3.webhooks import MessageEvent, TextMessageContent
+from linebot.v3.exceptions import InvalidSignatureError
+
+from config import OPENAI_API_KEY, OPENAI_MODEL, TOP_K, LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
 from db import fetch_top_chunks, fetch_top_matches
 from embeddings import embed_text
 
 
 app = FastAPI(title="Simple RAG API")
+
+line_handler = WebhookHandler(LINE_CHANNEL_SECRET)
+line_config = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 
 
 class ChatRequest(BaseModel):
@@ -65,7 +79,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         input=[
             {
                 "role": "system",
-                "content": "你是嚴謹的 RAG 助理。只根據提供資料回答；若資料不足，請明確說明。",
+                "content": "你是嚴謹的 RAG 助理。只根據提供資料回答；若資料不足可以使用你自己的通用知識補充，但必須清楚區分：哪些內容來自提供資料，哪些是模型補充。"
             },
             {"role": "user", "content": prompt},
         ],
@@ -85,3 +99,49 @@ def retrieve(request: RetrieveRequest) -> RetrieveResponse:
         top_k=request.top_k,
         matches=matches,
     )
+
+
+@app.post("/line/callback")
+async def line_callback(
+    request: Request,
+    x_line_signature: str = Header(...),
+) -> dict[str, str]:
+    if not LINE_CHANNEL_SECRET or not LINE_CHANNEL_ACCESS_TOKEN:
+        raise HTTPException(status_code=500, detail="LINE credentials are not configured")
+
+    body = await request.body()
+    try:
+        line_handler.handle(body.decode("utf-8"), x_line_signature)
+    except InvalidSignatureError:
+        raise HTTPException(status_code=400, detail="Invalid LINE signature")
+
+    return {"status": "ok"}
+
+
+@line_handler.add(MessageEvent, message=TextMessageContent)
+def handle_text_message(event: MessageEvent) -> None:
+    question = event.message.text.strip()
+    question_embedding = embed_text(question)
+    context_chunks = fetch_top_chunks(question_embedding, TOP_K)
+    prompt = build_prompt(question, context_chunks)
+
+    client = get_openai_client()
+    response = client.responses.create(
+        model=OPENAI_MODEL,
+        input=[
+            {
+                "role": "system",
+                "content": "你是嚴謹的 RAG 助理。只根據提供資料回答；若資料不足可以使用你自己的通用知識補充，但必須清楚區分：哪些內容來自提供資料，哪些是模型補充。",
+            },
+            {"role": "user", "content": prompt},
+        ],
+    )
+
+    with ApiClient(line_config) as api_client:
+        messaging_api = MessagingApi(api_client)
+        messaging_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response.output_text)],
+            )
+        )

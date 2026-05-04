@@ -1,18 +1,26 @@
 # Simple RAG API
 
-一個最小可用的 RAG backend 範例，使用 FastAPI、PostgreSQL + pgvector、sentence-transformers 與 OpenAI Responses API。
+一個最小可用的 RAG backend 範例，使用 FastAPI、PostgreSQL + pgvector、sentence-transformers 與 OpenAI Responses API，並整合 LINE Messaging API 機器人。
 
-使用流程：
+使用流程（REST API）：
 
 ```text
 User -> POST /chat -> FastAPI -> Embedding -> pgvector search -> Prompt -> OpenAI -> Answer
+```
+
+使用流程（LINE Bot）：
+
+```text
+LINE User -> LINE Platform -> POST /line/callback -> Signature check
+         -> Embedding -> pgvector search -> Prompt -> OpenAI -> Reply Message
 ```
 
 ## Features
 
 - `POST /chat` 問答 API
 - `POST /retrieve` 顯示最相近的 RAG chunks，不呼叫 OpenAI
-- 使用 `sentence-transformers/all-MiniLM-L6-v2` 產生 384 維 embedding
+- `POST /line/callback` LINE Bot webhook，接收訊息並回覆 RAG 答案
+- 使用 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` 產生 384 維 embedding
 - 使用 PostgreSQL + pgvector 做相似度搜尋
 - 使用 OpenAI Responses API 產生回答
 - 支援匯入 `documents/` 裡的 `.txt`、`.md` 與文字型 `.pdf` 文件
@@ -21,7 +29,7 @@ User -> POST /chat -> FastAPI -> Embedding -> pgvector search -> Prompt -> OpenA
 
 ```text
 simple-rag-api/
-├── app.py                 # FastAPI app and /chat endpoint
+├── app.py                 # FastAPI app、/chat、/retrieve、/line/callback
 ├── config.py              # Environment variable settings
 ├── db.py                  # Database connection and vector search helper
 ├── embeddings.py          # sentence-transformers embedding helper
@@ -39,6 +47,7 @@ simple-rag-api/
 - Python 3.10+
 - Docker Desktop
 - OpenAI API key
+- LINE Developers 帳號（LINE Bot 功能）
 
 ## Setup
 
@@ -68,7 +77,7 @@ Create your local `.env` file:
 touch .env
 ```
 
-Edit `.env`:
+Edit `.env`：
 
 ```env
 DATABASE_URL=postgresql+psycopg://rag_user:rag_password@localhost:5432/rag_db
@@ -76,6 +85,8 @@ OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o-mini
 EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 TOP_K=5
+LINE_CHANNEL_SECRET=your-line-channel-secret
+LINE_CHANNEL_ACCESS_TOKEN=your-line-channel-access-token
 ```
 
 Do not commit `.env`. It is already ignored by `.gitignore`.
@@ -141,6 +152,48 @@ Initialize and ingest through the API container:
 docker compose run --rm api python init_db.py
 docker compose run --rm api python ingest.py
 ```
+
+## LINE Bot Setup
+
+### 1. 建立 LINE Messaging API Channel
+
+1. 前往 [LINE Developers Console](https://developers.line.biz/console/)
+2. 建立 Provider（若尚未有）
+3. 建立 **Messaging API** channel
+4. 在 channel 設定頁面取得：
+   - **Channel Secret**（Basic settings）
+   - **Channel Access Token**（Messaging API → Issue）
+
+### 2. 填入 `.env`
+
+```env
+LINE_CHANNEL_SECRET=your-channel-secret
+LINE_CHANNEL_ACCESS_TOKEN=your-channel-access-token
+```
+
+### 3. 設定 Webhook URL
+
+LINE 需要一個公開的 HTTPS URL。本機開發可以使用 [ngrok](https://ngrok.com/)：
+
+```bash
+ngrok http 8000
+```
+
+複製 ngrok 產生的 HTTPS URL，到 LINE Developers Console → Messaging API → Webhook settings 填入：
+
+```text
+https://xxxx.ngrok.io/line/callback
+```
+
+啟用 **Use webhook** 開關，並按 **Verify** 確認連線成功。
+
+### 4. 關閉自動回覆
+
+在 LINE Official Account Manager → 回應設定中，關閉「自動回應訊息」與「加入好友的歡迎訊息」，避免和 webhook 回覆衝突。
+
+### 5. 測試
+
+加入 LINE Bot 為好友（掃描 QR Code），傳送任意文字訊息，Bot 將根據 RAG 知識庫回覆答案。
 
 ## View Database in Browser
 
@@ -231,6 +284,16 @@ Example response:
 }
 ```
 
+### LINE Webhook
+
+LINE 平台會自動呼叫此端點，不需手動觸發。端點格式如下：
+
+```text
+POST /line/callback
+Header: X-Line-Signature: <HMAC-SHA256 signature>
+Body: LINE webhook event JSON
+```
+
 ## Add Your Own Documents
 
 Put `.txt`, `.md`, or text-based `.pdf` files into the `documents/` folder:
@@ -257,7 +320,7 @@ python ingest.py
 4. Clear old chunks from `document_chunks`
 5. Insert new chunks into PostgreSQL
 
-After ingesting, call `/chat` again to ask questions about the new documents.
+After ingesting, call `/chat` or send a LINE message to ask questions about the new documents.
 
 PDF support uses `pypdf` text extraction. It works for PDFs that contain selectable text. Scanned image PDFs require OCR and are not supported by default.
 
@@ -321,6 +384,20 @@ OPENAI_API_KEY=your-openai-api-key
 ```
 
 Then restart `uvicorn`.
+
+### LINE webhook 回傳 400 Invalid signature
+
+確認 `.env` 中的 `LINE_CHANNEL_SECRET` 與 LINE Developers Console 上的 Channel Secret 完全一致。
+
+### LINE webhook 回傳 500
+
+確認 `LINE_CHANNEL_ACCESS_TOKEN` 已填入且未過期。可在 LINE Developers Console → Messaging API → Channel access token 重新 Issue。
+
+### LINE Bot 沒有回覆訊息
+
+1. 確認 LINE Developers Console 的 **Use webhook** 已啟用
+2. 確認 Official Account Manager 的「自動回應訊息」已關閉
+3. 確認 ngrok（或正式 HTTPS）URL 可正常連到本機 8000 port
 
 ### GitHub push asks for password
 
