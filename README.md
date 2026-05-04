@@ -24,14 +24,12 @@ graph LR
 
     subgraph ServerZone["Application Server　(Docker Compose)"]
         API["FastAPI\n:8000"]:::appNode
+        ST["sentence-\ntransformers"]:::mlNode
         PG[("PostgreSQL\n+ pgvector")]:::dbNode
         ADM["Adminer\n:8080"]:::appNode
     end
 
-    subgraph MLZone["外部服務"]
-        ST["sentence-\ntransformers"]:::mlNode
-        OAI["OpenAI\nAPI"]:::mlNode
-    end
+    OAI["OpenAI\nAPI"]:::mlNode
 
     DOCS["documents/\n.txt .md .pdf"]:::fileNode --> ING["ingest.py"]:::fileNode
     ING -->|embed & store| PG
@@ -40,12 +38,11 @@ graph LR
     LU -->|"傳訊息"| LP
     LP -->|"POST /line/callback"| API
 
-    API -->|"embed question"| ST
-    ST -->|"384-dim vector"| PG
+    API -->|"vector search"| PG
     PG -->|"top-K chunks"| API
     API -->|"prompt + context"| OAI
-    OAI -.->|"answer"| API
-    API -.->|"reply"| LP
+    OAI -->|"answer"| API
+    API -->|"reply"| LP
 
     ADM -. "browse" .-> PG
 ```
