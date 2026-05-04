@@ -5,48 +5,48 @@
 ## 系統架構
 
 ```mermaid
-graph TB
-    subgraph Users["使用者"]
-        U["REST Client\n(curl / Swagger)"]
-        LU["LINE User"]
+graph LR
+    classDef userNode fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#1A237E
+    classDef lineNode fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
+    classDef appNode  fill:#FFF8E1,stroke:#E65100,stroke-width:2px,color:#BF360C
+    classDef dbNode   fill:#FBE9E7,stroke:#BF360C,stroke-width:2px,color:#7F0000
+    classDef mlNode   fill:#EDE7F6,stroke:#4527A0,stroke-width:2px,color:#311B92
+    classDef fileNode fill:#F5F5F5,stroke:#616161,stroke-width:1px,color:#212121
+
+    subgraph ClientZone["用戶端"]
+        U["REST Client"]:::userNode
+        LU["LINE 使用者"]:::userNode
     end
 
-    LP["LINE Platform\n(LINE Messaging API)"]
-
-    subgraph Docker["Docker Compose"]
-        subgraph API["FastAPI  :8000"]
-            CH["POST /chat"]
-            RT["POST /retrieve"]
-            CB["POST /line/callback\nHMAC 驗簽"]
-        end
-        PG[("PostgreSQL + pgvector\ndocument_chunks\nvector(384)")]
-        ADM["Adminer  :8080"]
+    subgraph LineZone["LINE Cloud"]
+        LP["LINE Platform"]:::lineNode
     end
 
-    ST["sentence-transformers\nparaphrase-multilingual-MiniLM-L12-v2"]
-    OAI["OpenAI\nResponses API"]
-
-    subgraph Ingest["文件匯入"]
-        DOCS["documents/\n.txt  .md  .pdf"]
-        ING["ingest.py"]
+    subgraph ServerZone["Application Server　(Docker Compose)"]
+        API["FastAPI\n:8000"]:::appNode
+        PG[("PostgreSQL\n+ pgvector")]:::dbNode
+        ADM["Adminer\n:8080"]:::appNode
     end
 
-    U -- "POST /chat" --> CH
-    U -- "POST /retrieve" --> RT
-    LU -- "傳送訊息" --> LP
-    LP -- "webhook + X-Line-Signature" --> CB
+    subgraph MLZone["外部服務"]
+        ST["sentence-\ntransformers"]:::mlNode
+        OAI["OpenAI\nAPI"]:::mlNode
+    end
 
-    CH & RT & CB -- "embed question" --> ST
-    ST -- "384-dim vector" --> PG
-    PG -- "top-K chunks" --> CH & RT & CB
+    DOCS["documents/\n.txt .md .pdf"]:::fileNode --> ING["ingest.py"]:::fileNode
+    ING -->|embed & store| PG
 
-    CH & CB -- "prompt + context" --> OAI
-    OAI -- "answer" --> CH
-    OAI -- "answer" --> CB
-    CB -- "reply_message()" --> LP
-    LP -- "回覆訊息" --> LU
+    U -->|"POST /chat · /retrieve"| API
+    LU -->|"傳訊息"| LP
+    LP -->|"POST /line/callback"| API
 
-    DOCS --> ING --> PG
+    API -->|"embed question"| ST
+    ST -->|"384-dim vector"| PG
+    PG -->|"top-K chunks"| API
+    API -->|"prompt + context"| OAI
+    OAI -.->|"answer"| API
+    API -.->|"reply"| LP
+
     ADM -. "browse" .-> PG
 ```
 
