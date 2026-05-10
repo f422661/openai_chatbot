@@ -27,12 +27,16 @@ graph LR
         ST["sentence-\ntransformers"]:::mlNode
         PG[("PostgreSQL\n+ pgvector")]:::dbNode
         ADM["Adminer\n:8080"]:::appNode
+        CF["cloudflared\n(HTTPS Tunnel)"]:::appNode
+        INIT["init service\n(init_db + ingest)"]:::appNode
     end
 
     OAI["OpenAI\nAPI"]:::mlNode
+    CFS["Cloudflare\nServers"]:::lineNode
 
-    DOCS["documents/\n.txt .md .pdf"]:::fileNode --> ING["ingest.py"]:::fileNode
-    ING -->|embed & store| PG
+    DOCS["documents/\n.txt .md .pdf"]:::fileNode --> INIT
+    INIT -->|embed & store| PG
+    CF -->|tunnel| CFS
 
     U -->|"POST /chat · /retrieve"| API
     LU -->|"傳訊息"| LP
@@ -157,32 +161,53 @@ http://127.0.0.1:8000
 
 ## Run with Docker Compose
 
-This starts FastAPI, PostgreSQL + pgvector, and Adminer together:
+Docker Compose 會自動依序啟動所有服務，包含資料庫初始化、文件 ingest 與 HTTPS tunnel：
 
 ```bash
-docker compose up --build
+docker compose up -d --build
+```
+
+啟動順序：
+
+```text
+postgres (healthy) → init (init_db + ingest) → api + cloudflared
+```
+
+查看 init 進度：
+
+```bash
+docker compose logs -f init
+```
+
+看到 `Ingested X chunks.` 代表成功。
+
+查看 Cloudflare Tunnel 的 HTTPS URL：
+
+```bash
+docker compose logs cloudflared
+```
+
+輸出範例：
+
+```text
+Your quick Tunnel has been created! Visit it at:
+https://abc-def-123.trycloudflare.com
 ```
 
 Services:
 
 ```text
-FastAPI:  http://127.0.0.1:8000
-Swagger:  http://127.0.0.1:8000/docs
-Adminer:  http://127.0.0.1:8080
-Postgres: localhost:5432
+FastAPI:   http://127.0.0.1:8000
+Swagger:   http://127.0.0.1:8000/docs
+Adminer:   http://127.0.0.1:8080
+Postgres:  localhost:5432
+HTTPS:     https://abc-def-123.trycloudflare.com  (從 logs 取得)
 ```
 
 Inside Docker Compose, the API connects to PostgreSQL through:
 
 ```text
 postgresql+psycopg://rag_user:rag_password@postgres:5432/rag_db
-```
-
-Initialize and ingest through the API container:
-
-```bash
-docker compose run --rm api python init_db.py
-docker compose run --rm api python ingest.py
 ```
 
 ## LINE Bot Setup
@@ -205,19 +230,23 @@ LINE_CHANNEL_ACCESS_TOKEN=your-channel-access-token
 
 ### 3. 設定 Webhook URL
 
-LINE 需要一個公開的 HTTPS URL。本機開發可以使用 [ngrok](https://ngrok.com/)：
+LINE 需要一個公開的 HTTPS URL。本專案使用 **Cloudflare Tunnel**，不需帳號即可取得 HTTPS URL。
+
+啟動 Docker Compose 後，執行：
 
 ```bash
-ngrok http 8000
+docker compose logs cloudflared
 ```
 
-複製 ngrok 產生的 HTTPS URL，到 LINE Developers Console → Messaging API → Webhook settings 填入：
+複製輸出中的 URL，到 LINE Developers Console → Messaging API → Webhook settings 填入：
 
 ```text
-https://xxxx.ngrok.io/line/callback
+https://abc-def-123.trycloudflare.com/line/callback
 ```
 
 啟用 **Use webhook** 開關，並按 **Verify** 確認連線成功。
+
+> **注意**：每次重啟 Docker Compose，Cloudflare Tunnel URL 都會改變，需重新更新 LINE Webhook 設定。
 
 ### 4. 關閉自動回覆
 
@@ -341,6 +370,12 @@ documents/
 Then run:
 
 ```bash
+docker compose up -d init
+```
+
+或在 Docker Compose 之外直接執行：
+
+```bash
 python ingest.py
 ```
 
@@ -429,7 +464,7 @@ Then restart `uvicorn`.
 
 1. 確認 LINE Developers Console 的 **Use webhook** 已啟用
 2. 確認 Official Account Manager 的「自動回應訊息」已關閉
-3. 確認 ngrok（或正式 HTTPS）URL 可正常連到本機 8000 port
+3. 確認 Cloudflare Tunnel URL 是否已更新（重啟後 URL 會變）：`docker compose logs cloudflared`
 
 ### GitHub push asks for password
 

@@ -120,28 +120,33 @@ async def line_callback(
 
 @line_handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event: MessageEvent) -> None:
-    question = event.message.text.strip()
-    question_embedding = embed_text(question)
-    context_chunks = fetch_top_chunks(question_embedding, TOP_K)
-    prompt = build_prompt(question, context_chunks)
+    try:
+        question = event.message.text.strip()
+        question_embedding = embed_text(question)
+        context_chunks = fetch_top_chunks(question_embedding, TOP_K)
+        prompt = build_prompt(question, context_chunks)
 
-    client = get_openai_client()
-    response = client.responses.create(
-        model=OPENAI_MODEL,
-        input=[
-            {
-                "role": "system",
-                "content": "你是嚴謹的 RAG 助理。只根據提供資料回答；若資料不足可以使用你自己的通用知識補充，但必須清楚區分：哪些內容來自提供資料，哪些是模型補充。",
-            },
-            {"role": "user", "content": prompt},
-        ],
-    )
-
-    with ApiClient(line_config) as api_client:
-        messaging_api = MessagingApi(api_client)
-        messaging_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=response.output_text)],
-            )
+        client = get_openai_client()
+        response = client.responses.create(
+            model=OPENAI_MODEL,
+            input=[
+                {
+                    "role": "system",
+                    "content": "你是嚴謹的 RAG 助理。只根據提供資料回答；若資料不足可以使用你自己的通用知識補充，但必須清楚區分：哪些內容來自提供資料，哪些是模型補充。",
+                },
+                {"role": "user", "content": prompt},
+            ],
         )
+
+        with ApiClient(line_config) as api_client:
+            messaging_api = MessagingApi(api_client)
+            messaging_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=response.output_text)],
+                )
+            )
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] handle_text_message failed: {e}")
+        traceback.print_exc()
