@@ -22,6 +22,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://rag_user:rag_password@postgres:5432/rag_db
       DOCUMENTS_DIR: /app/documents
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     volumes:
@@ -29,6 +30,8 @@ services:
       - huggingface_cache:/root/.cache/huggingface
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       init:
         condition: service_completed_successfully
@@ -49,6 +52,18 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis/redis-stack-server:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   adminer:
     image: adminer:latest
     ports:
@@ -67,3 +82,5 @@ services:
 volumes:
   postgres_data:
   huggingface_cache:
+  redis_data:
+

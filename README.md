@@ -58,6 +58,7 @@ graph LR
 - `POST /line/callback` LINE Bot webhook，接收訊息並回覆 RAG 答案
 - 使用 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` 產生 384 維 embedding
 - 使用 PostgreSQL + pgvector 做相似度搜尋
+- 使用 Redis Stack (Vector Search) 提供語意快取 (Semantic Cache)，降低 API 延遲與 Token 費用
 - 使用 OpenAI Responses API 產生回答
 - 支援匯入 `documents/` 裡的 `.txt`、`.md` 與文字型 `.pdf` 文件
 
@@ -69,14 +70,16 @@ simple-rag-api/
 ├── config.py              # Environment variable settings
 ├── db.py                  # Database connection and vector search helper
 ├── embeddings.py          # sentence-transformers embedding helper
+├── semantic_cache.py      # Redis vector semantic cache module
 ├── init_db.py             # Create pgvector extension and document_chunks table
 ├── ingest.py              # Read documents, chunk text, embed, and insert into DB
 ├── requirements.txt       # Python dependencies
-├── docker-compose.yml     # PostgreSQL + pgvector service
+├── docker-compose.yml     # PostgreSQL + pgvector + Redis Stack services
 ├── .env.example           # Environment variable template
 └── documents/
     └── example.md         # Example document
 ```
+
 
 ## Requirements
 
@@ -123,7 +126,11 @@ EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 TOP_K=5
 LINE_CHANNEL_SECRET=your-line-channel-secret
 LINE_CHANNEL_ACCESS_TOKEN=your-line-channel-access-token
+REDIS_URL=redis://localhost:6379/0
+CACHE_TTL=86400
+SIMILARITY_THRESHOLD=0.92
 ```
+
 
 Do not commit `.env`. It is already ignored by `.gitignore`.
 
@@ -201,8 +208,10 @@ FastAPI:   http://127.0.0.1:8000
 Swagger:   http://127.0.0.1:8000/docs
 Adminer:   http://127.0.0.1:8080
 Postgres:  localhost:5432
+Redis:     localhost:6379
 HTTPS:     https://abc-def-123.trycloudflare.com  (從 logs 取得)
 ```
+
 
 Inside Docker Compose, the API connects to PostgreSQL through:
 
