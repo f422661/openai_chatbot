@@ -72,6 +72,16 @@ services:
       postgres:
         condition: service_healthy
 
+  redisinsight:
+    image: redis/redisinsight:latest
+    ports:
+      - "5540:5540"
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     command: tunnel --url http://api:8000
@@ -83,4 +93,6 @@ volumes:
   postgres_data:
   huggingface_cache:
   redis_data:
+  redisinsight_data:
+
 

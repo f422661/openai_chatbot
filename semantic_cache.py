@@ -3,8 +3,9 @@ import uuid
 import numpy as np
 import redis
 from redis.commands.search.field import VectorField, TextField
-from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+from redis.commands.search.index_definition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
+
 
 from config import REDIS_URL, CACHE_TTL, SIMILARITY_THRESHOLD
 from embeddings import embed_text
