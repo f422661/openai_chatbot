@@ -1,5 +1,4 @@
 from openai import OpenAI
-from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, Header, Request
 
 from linebot.v3 import WebhookHandler
@@ -17,6 +16,13 @@ from config import OPENAI_API_KEY, OPENAI_MODEL, TOP_K, LINE_CHANNEL_SECRET, LIN
 from db import fetch_top_chunks, fetch_top_matches
 from embeddings import embed_text
 from semantic_cache import get_semantic_cache, set_semantic_cache
+from schemas import (
+    ChatRequest,
+    ChatResponse,
+    RetrieveRequest,
+    RetrievedChunk,
+    RetrieveResponse,
+)
 
 
 app = FastAPI(title="Simple RAG API")
@@ -24,31 +30,6 @@ app = FastAPI(title="Simple RAG API")
 line_handler = WebhookHandler(LINE_CHANNEL_SECRET)
 line_config = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 
-
-class ChatRequest(BaseModel):
-    question: str = Field(..., min_length=1)
-
-
-class ChatResponse(BaseModel):
-    answer: str
-    context: list[str]
-
-
-class RetrieveRequest(BaseModel):
-    question: str = Field(..., min_length=1)
-    top_k: int = Field(default=TOP_K, ge=1, le=20)
-
-
-class RetrievedChunk(BaseModel):
-    id: int
-    content: str
-    distance: float
-
-
-class RetrieveResponse(BaseModel):
-    question: str
-    top_k: int
-    matches: list[RetrievedChunk]
 
 
 def build_prompt(question: str, context_chunks: list[str]) -> str:

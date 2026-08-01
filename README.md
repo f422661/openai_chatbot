@@ -71,6 +71,7 @@ simple-rag-api/
 ├── db.py                  # Database connection and vector search helper
 ├── embeddings.py          # sentence-transformers embedding helper
 ├── semantic_cache.py      # Redis vector semantic cache module
+├── schemas.py             # Pydantic request/response data models
 ├── init_db.py             # Create pgvector extension and document_chunks table
 ├── ingest.py              # Read documents, chunk text, embed, and insert into DB
 ├── requirements.txt       # Python dependencies
@@ -79,6 +80,7 @@ simple-rag-api/
 └── documents/
     └── example.md         # Example document
 ```
+
 
 
 ## Requirements
