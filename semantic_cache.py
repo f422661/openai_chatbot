@@ -12,7 +12,6 @@ from redis.commands.search.query import Query
 
 from config import (
     CACHE_TTL,
-    CACHE_VERSION,
     DEBUG_VECTOR_LOGS,
     EMBEDDING_DIM,
     REDIS_URL,
@@ -22,8 +21,8 @@ from config import (
 redis_client = redis.Redis.from_url(REDIS_URL)
 logger = logging.getLogger("uvicorn.error")
 
-INDEX_NAME = f"idx:semantic_cache:{CACHE_VERSION}"
-CACHE_KEY_PREFIX = f"semantic_cache:{CACHE_VERSION}:"
+INDEX_NAME = "idx:semantic_cache"
+CACHE_KEY_PREFIX = "semantic_cache:"
 
 
 def init_semantic_cache_index() -> bool:

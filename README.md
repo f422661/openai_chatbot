@@ -176,7 +176,6 @@ LINE_CHANNEL_ACCESS_TOKEN=your-line-channel-access-token
 REDIS_URL=redis://localhost:6379/0
 CACHE_TTL=86400
 SIMILARITY_THRESHOLD=0.92
-CACHE_VERSION=v2
 DEBUG_VECTOR_LOGS=false
 ```
 
@@ -387,18 +386,15 @@ question → embedding → Redis semantic cache
                                     → store answer in Redis → return answer
 ```
 
-Redis 使用帶版本的 key 與 RediSearch index：
+Redis 使用共同的 key prefix 與 RediSearch index：
 
 ```text
-Key:   semantic_cache:v2:<uuid>
-Index: idx:semantic_cache:v2
+Key:    semantic_cache:<uuid>
+Prefix: semantic_cache:
+Index:  idx:semantic_cache
 ```
 
-當文件、prompt、answer model 或 embedding model 有重大變更時，可以提高 `CACHE_VERSION`，讓新請求不再命中舊版快取：
-
-```env
-CACHE_VERSION=v3
-```
+索引會搜尋所有以 `semantic_cache:` 開頭的 Hash，因此舊格式 `semantic_cache:<uuid>` 與曾建立的 `semantic_cache:v2:<uuid>` 都會一起參與相似度搜尋。每筆資料會在 `CACHE_TTL` 到期後自動刪除。
 
 若要在 API log 查看 query vector、命中向量，以及 Redis/Python 計算出的 cosine distance，可暫時啟用：
 
