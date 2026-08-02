@@ -26,7 +26,9 @@ graph LR
         API["FastAPI\n:8000"]:::appNode
         ST["sentence-\ntransformers"]:::mlNode
         PG[("PostgreSQL\n+ pgvector")]:::dbNode
+        REDIS[("Redis Stack\nSemantic Cache")]:::dbNode
         ADM["Adminer\n:8080"]:::appNode
+        RI["RedisInsight\n:5540"]:::appNode
         CF["cloudflared\n(HTTPS Tunnel)"]:::appNode
         INIT["init service\n(init_db + ingest)"]:::appNode
     end
@@ -35,20 +37,28 @@ graph LR
     CFS["Cloudflare\nServers"]:::lineNode
 
     DOCS["documents/\n.txt .md .pdf"]:::fileNode --> INIT
-    INIT -->|embed & store| PG
-    CF -->|tunnel| CFS
+    INIT -->|generate embedding| ST
+    INIT -->|store chunks + vectors| PG
+    CF -->|outbound tunnel| CFS
+    CFS -->|HTTPS traffic| CF
+    CF --> API
 
     U -->|"POST /chat · /retrieve"| API
     LU -->|"傳訊息"| LP
     LP -->|"POST /line/callback"| API
 
-    API -->|"vector search"| PG
-    PG -->|"top-K chunks"| API
-    API -->|"prompt + context"| OAI
-    OAI -->|"answer"| API
+    API -->|generate query embedding| ST
+    API -->|semantic cache lookup| REDIS
+    REDIS -->|cache hit: answer| API
+    API -->|cache miss: vector search| PG
+    PG -->|top-K chunks| API
+    API -->|prompt + context| OAI
+    OAI -->|answer| API
+    API -->|store answer + vector + TTL| REDIS
     API -->|"reply"| LP
 
     ADM -. "browse" .-> PG
+    RI -. "browse" .-> REDIS
 ```
 
 ## Features
@@ -66,6 +76,8 @@ graph LR
 
 ```text
 simple-rag-api/
+├── README.md              # Setup、architecture and usage guide
+├── Dockerfile             # FastAPI container image
 ├── app.py                 # FastAPI app、/chat、/retrieve、/line/callback
 ├── config.py              # Environment variable settings
 ├── db.py                  # Database connection and vector search helper
@@ -77,8 +89,10 @@ simple-rag-api/
 ├── requirements.txt       # Python dependencies
 ├── docker-compose.yml     # PostgreSQL + pgvector + Redis Stack services
 ├── .env.example           # Environment variable template
-└── documents/
-    └── example.md         # Example document
+├── documents/
+│   └── example.md         # Example document
+└── tests/
+    └── test_app.py        # Shared chat flow unit tests
 ```
 
 
@@ -112,10 +126,10 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Create your local `.env` file:
+Create your local `.env` file from the template:
 
 ```bash
-touch .env
+cp .env.example .env
 ```
 
 Edit `.env`：
@@ -141,10 +155,10 @@ Do not commit `.env`. It is already ignored by `.gitignore`.
 
 ## Run Locally
 
-Start PostgreSQL with pgvector:
+Start PostgreSQL and Redis only:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres redis
 ```
 
 Initialize the database:
@@ -214,6 +228,7 @@ Swagger:   http://127.0.0.1:8000/docs
 Adminer:   http://127.0.0.1:8080
 Postgres:  localhost:5432
 Redis:     localhost:6379
+Redis UI:  http://127.0.0.1:5540
 HTTPS:     https://abc-def-123.trycloudflare.com  (從 logs 取得)
 ```
 
@@ -333,6 +348,43 @@ Example response:
 }
 ```
 
+`/chat` 與 LINE 訊息共用同一套問答流程。系統只會為每個問題產生一次 query embedding，接著先搜尋 Redis semantic cache：
+
+```text
+question → embedding → Redis semantic cache
+                         ├── hit  → return cached answer
+                         └── miss → pgvector retrieval → OpenAI
+                                    → store answer in Redis → return answer
+```
+
+Redis 使用帶版本的 key 與 RediSearch index：
+
+```text
+Key:   semantic_cache:v1:<uuid>
+Index: idx:semantic_cache:v1
+```
+
+當文件、prompt、answer model 或 embedding model 有重大變更時，可以提高 `CACHE_VERSION`，讓新請求不再命中舊版快取：
+
+```env
+CACHE_VERSION=v2
+```
+
+若要在 API log 查看 query vector、命中向量，以及 Redis/Python 計算出的 cosine distance，可暫時啟用：
+
+```env
+DEBUG_VECTOR_LOGS=true
+```
+
+重新建立 API 容器並查看 log：
+
+```bash
+docker compose up -d --build api
+docker compose logs -f api
+```
+
+正式使用時建議保持 `DEBUG_VECTOR_LOGS=false`，避免每次搜尋額外讀取向量並產生大量 log。
+
 ### Retrieve Similar Chunks
 
 Use this endpoint to inspect the most similar RAG chunks without calling OpenAI:
@@ -416,7 +468,7 @@ password: rag_password
 port: 5432
 ```
 
-The main table is:
+The main table uses `EMBEDDING_DIM=384` by default:
 
 ```sql
 CREATE TABLE document_chunks (
@@ -494,7 +546,13 @@ git push -u origin main
 Compile-check Python files:
 
 ```bash
-python -m py_compile app.py init_db.py ingest.py config.py db.py embeddings.py
+python -m py_compile *.py tests/*.py
+```
+
+Run unit tests:
+
+```bash
+python -m unittest discover -s tests -v
 ```
 
 Stop the database:
