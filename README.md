@@ -5,73 +5,87 @@
 ## 系統架構
 
 ```mermaid
-flowchart LR
-    %% ── Styles ───────────────────────────────────────────────
-    classDef client fill:#EFF6FF,stroke:#3B82F6,color:#1E3A8A,stroke-width:1.5px
-    classDef gateway fill:#F0FDFA,stroke:#14B8A6,color:#134E4A,stroke-width:1.5px
-    classDef service fill:#FFF7ED,stroke:#F97316,color:#7C2D12,stroke-width:1.5px
-    classDef model fill:#F5F3FF,stroke:#8B5CF6,color:#4C1D95,stroke-width:1.5px
-    classDef storage fill:#FDF2F8,stroke:#EC4899,color:#831843,stroke-width:1.5px
-    classDef success fill:#F0FDF4,stroke:#22C55E,color:#14532D,stroke-width:2px
-    classDef utility fill:#F8FAFC,stroke:#94A3B8,color:#334155,stroke-width:1px,stroke-dasharray:4 3
-
-    %% ── Entry points ─────────────────────────────────────────
-    subgraph CLIENTS["Clients"]
-        direction TB
-        REST["REST / Swagger"]:::client
-        USER["LINE User"]:::client
-    end
-
-    subgraph EDGE["Public Edge"]
-        direction TB
-        LINE["LINE Platform"]:::gateway
-        TUNNEL["Cloudflare Tunnel"]:::gateway
-    end
-
-    %% ── Shared RAG request path ───────────────────────────────
-    subgraph APP["RAG Application · Docker Compose"]
+flowchart TB
+    %% ── Channels ──────────────────────────────────────────────
+    subgraph CHANNELS["01 · Channels"]
         direction LR
-        API["FastAPI<br/>/chat · /retrieve · /line/callback"]:::service
-        CHAT["Shared Answer Service"]:::service
-        EMBED["sentence-transformers<br/>384-d embedding"]:::model
-        CACHE[("Redis Stack<br/>Semantic Cache")]:::storage
-        PG[("PostgreSQL<br/>pgvector Knowledge Base")]:::storage
-        STORE["Store Cache · TTL"]:::service
-        ANSWER(["Return Answer"]):::success
-
-        API -->|"/chat · LINE"| CHAT --> EMBED -->|"1 · Cache lookup"| CACHE
-        API -.->|"/retrieve · direct search"| PG
-        CACHE -->|"Hit"| ANSWER
-        CACHE -->|"Miss · 2"| PG
+        WEB["REST Client<br/>Swagger UI"]
+        LINE["LINE User<br/>LINE Platform"]
     end
 
-    OPENAI["OpenAI<br/>Responses API"]:::model
+    EDGE["Cloudflare Tunnel<br/>Public HTTPS"]
 
-    REST -->|"POST /chat · /retrieve"| API
-    USER --> LINE --> TUNNEL -->|"POST /line/callback"| API
-    PG -->|"3 · Top-K context"| OPENAI
-    OPENAI -->|"4 · Generated answer"| STORE --> ANSWER
-    STORE -.->|"5 · Write"| CACHE
-
-    %% ── Offline ingestion ─────────────────────────────────────
-    subgraph INGESTION["Document Ingestion"]
+    %% ── API boundary ──────────────────────────────────────────
+    subgraph API_LAYER["02 · API Layer"]
         direction LR
-        DOCS["documents/<br/>PDF · Markdown · Text"]:::utility
-        INIT["init + ingest"]:::utility
-        DOC_EMBED["Chunk + Embed"]:::utility
-        DOCS --> INIT --> DOC_EMBED
+        CHAT_API["POST /chat"]
+        RETRIEVE_API["POST /retrieve"]
+        LINE_API["POST /line/callback"]
     end
 
+    %% ── Online answer path ────────────────────────────────────
+    subgraph RAG["03 · Shared RAG Answer Pipeline"]
+        direction LR
+        SERVICE["Answer Service"]
+        QUERY_EMBED["Create Query<br/>Embedding"]
+        REDIS[("Redis<br/>Semantic Cache")]
+        HIT{"Similarity<br/>≥ threshold?"}
+        PG[("PostgreSQL<br/>pgvector")]
+        PROMPT["Build Prompt<br/>with Top-K Context"]
+        OPENAI["OpenAI<br/>Responses API"]
+        SAVE["Cache Answer<br/>with TTL"]
+        RESPONSE(["Return Answer"])
+
+        SERVICE --> QUERY_EMBED --> REDIS --> HIT
+        HIT -->|"Yes · Cache hit"| RESPONSE
+        HIT -->|"No · Cache miss"| PG
+        PG --> PROMPT --> OPENAI --> SAVE --> RESPONSE
+        SAVE -.->|"question · vector · answer · context"| REDIS
+    end
+
+    %% ── Offline knowledge pipeline ────────────────────────────
+    subgraph KNOWLEDGE["04 · Knowledge Ingestion"]
+        direction LR
+        FILES["Documents<br/>PDF · MD · TXT"]
+        CHUNK["Clean & Chunk"]
+        DOC_EMBED["Create Document<br/>Embeddings"]
+        FILES --> CHUNK --> DOC_EMBED
+    end
+
+    %% ── Request routing ───────────────────────────────────────
+    WEB --> CHAT_API
+    WEB --> RETRIEVE_API
+    LINE --> EDGE --> LINE_API
+    CHAT_API --> SERVICE
+    LINE_API --> SERVICE
+    RETRIEVE_API -->|"Embed + Top-K search only"| PG
     DOC_EMBED -->|"Store chunks + vectors"| PG
 
-    %% ── Optional admin tools ──────────────────────────────────
-    ADMINER["Adminer · :8080"]:::utility -.-> PG
-    INSIGHT["RedisInsight · :5540"]:::utility -.-> CACHE
+    %% ── Operations ────────────────────────────────────────────
+    ADMINER["Adminer"] -.->|"Inspect"| PG
+    INSIGHT["RedisInsight"] -.->|"Inspect"| REDIS
 
-    style CLIENTS fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px
-    style EDGE fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px
-    style APP fill:#FFFBEB,stroke:#FCD34D,stroke-width:1px
-    style INGESTION fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px
+    %% ── Visual system ─────────────────────────────────────────
+    classDef channel fill:#FFFFFF,stroke:#64748B,color:#0F172A,stroke-width:1.5px
+    classDef api fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:1.5px
+    classDef process fill:#EEF2FF,stroke:#6366F1,color:#312E81,stroke-width:1.5px
+    classDef data fill:#FFF7ED,stroke:#F97316,color:#7C2D12,stroke-width:1.5px
+    classDef decision fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:1.5px
+    classDef output fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef muted fill:#F8FAFC,stroke:#94A3B8,color:#475569,stroke-width:1px,stroke-dasharray:4 3
+
+    class WEB,LINE channel
+    class EDGE,CHAT_API,RETRIEVE_API,LINE_API api
+    class SERVICE,QUERY_EMBED,PROMPT,OPENAI,SAVE,CHUNK,DOC_EMBED process
+    class REDIS,PG data
+    class HIT decision
+    class RESPONSE output
+    class FILES,ADMINER,INSIGHT muted
+
+    style CHANNELS fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px
+    style API_LAYER fill:#F0F9FF,stroke:#7DD3FC,stroke-width:1px
+    style RAG fill:#FAFAFF,stroke:#C7D2FE,stroke-width:1px
+    style KNOWLEDGE fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px
 ```
 
 ## Features
