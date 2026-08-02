@@ -21,6 +21,7 @@ from config import (
 )
 from db import fetch_top_chunks, fetch_top_matches
 from embeddings import embed_text
+from prompt_loader import load_prompt
 from semantic_cache import get_semantic_cache, set_semantic_cache
 from schemas import (
     ChatRequest,
@@ -34,10 +35,19 @@ app = FastAPI(title="Simple RAG API")
 
 line_handler = WebhookHandler(LINE_CHANNEL_SECRET)
 line_config = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
+RAG_SYSTEM_PROMPT = load_prompt("rag_system_prompt.md")
+
 
 def build_prompt(question: str, context_chunks: list[str]) -> str:
-    context = "\n\n".join(context_chunks) if context_chunks else "沒有找到相關資料。"
-    return f"根據以下資料回答:\n{context}\n\n問題:{question}"
+    if context_chunks:
+        context = "\n\n".join(
+            f"[來源 {index}]\n{chunk}"
+            for index, chunk in enumerate(context_chunks, start=1)
+        )
+    else:
+        context = "（沒有可用的參考資料）"
+
+    return f"參考資料：\n\n{context}\n\n使用者問題：\n{question}"
 
 
 def get_openai_client() -> OpenAI:
@@ -63,13 +73,8 @@ def answer_question(question: str) -> ChatResponse:
     client = get_openai_client()
     response = client.responses.create(
         model=OPENAI_MODEL,
-        input=[
-            {
-                "role": "system",
-                "content": "你是嚴謹的 RAG 助理。只根據提供資料回答；若資料不足可以使用你自己的通用知識補充，但必須清楚區分：哪些內容來自提供資料，哪些是模型補充。",
-            },
-            {"role": "user", "content": prompt},
-        ],
+        instructions=RAG_SYSTEM_PROMPT,
+        input=prompt,
     )
 
     answer = response.output_text

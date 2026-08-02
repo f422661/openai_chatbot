@@ -109,6 +109,7 @@ simple-rag-api/
 ├── config.py              # Environment variable settings
 ├── db.py                  # Database connection and vector search helper
 ├── embeddings.py          # sentence-transformers embedding helper
+├── prompt_loader.py       # Load and cache prompt files
 ├── semantic_cache.py      # Redis vector semantic cache module
 ├── schemas.py             # Pydantic request/response data models
 ├── init_db.py             # Create pgvector extension and document_chunks table
@@ -116,6 +117,8 @@ simple-rag-api/
 ├── requirements.txt       # Python dependencies
 ├── docker-compose.yml     # PostgreSQL + pgvector + Redis Stack services
 ├── .env.example           # Environment variable template
+├── prompts/
+│   └── rag_system_prompt.md # RAG system instructions
 ├── documents/
 │   └── example.md         # Example document
 └── tests/
@@ -173,7 +176,7 @@ LINE_CHANNEL_ACCESS_TOKEN=your-line-channel-access-token
 REDIS_URL=redis://localhost:6379/0
 CACHE_TTL=86400
 SIMILARITY_THRESHOLD=0.92
-CACHE_VERSION=v1
+CACHE_VERSION=v2
 DEBUG_VECTOR_LOGS=false
 ```
 
@@ -387,14 +390,14 @@ question → embedding → Redis semantic cache
 Redis 使用帶版本的 key 與 RediSearch index：
 
 ```text
-Key:   semantic_cache:v1:<uuid>
-Index: idx:semantic_cache:v1
+Key:   semantic_cache:v2:<uuid>
+Index: idx:semantic_cache:v2
 ```
 
 當文件、prompt、answer model 或 embedding model 有重大變更時，可以提高 `CACHE_VERSION`，讓新請求不再命中舊版快取：
 
 ```env
-CACHE_VERSION=v2
+CACHE_VERSION=v3
 ```
 
 若要在 API log 查看 query vector、命中向量，以及 Redis/Python 計算出的 cosine distance，可暫時啟用：

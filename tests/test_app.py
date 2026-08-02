@@ -63,8 +63,27 @@ class AnswerQuestionTests(unittest.TestCase):
             "new answer",
             context,
         )
+        create_call = get_openai_client.return_value.responses.create
+        create_call.assert_called_once()
+        self.assertEqual(
+            create_call.call_args.kwargs["instructions"],
+            app.RAG_SYSTEM_PROMPT,
+        )
+        self.assertIn("[來源 1]\nretrieved context", create_call.call_args.kwargs["input"])
         self.assertEqual(result.answer, "new answer")
         self.assertEqual(result.context, context)
+
+    def test_build_prompt_numbers_context_sources(self) -> None:
+        prompt = app.build_prompt("question", ["first", "second"])
+
+        self.assertIn("[來源 1]\nfirst", prompt)
+        self.assertIn("[來源 2]\nsecond", prompt)
+        self.assertIn("使用者問題：\nquestion", prompt)
+
+    def test_build_prompt_handles_missing_context(self) -> None:
+        prompt = app.build_prompt("question", [])
+
+        self.assertIn("沒有可用的參考資料", prompt)
 
 
 if __name__ == "__main__":
