@@ -5,60 +5,73 @@
 ## 系統架構
 
 ```mermaid
-graph LR
-    classDef userNode fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#1A237E
-    classDef lineNode fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
-    classDef appNode  fill:#FFF8E1,stroke:#E65100,stroke-width:2px,color:#BF360C
-    classDef dbNode   fill:#FBE9E7,stroke:#BF360C,stroke-width:2px,color:#7F0000
-    classDef mlNode   fill:#EDE7F6,stroke:#4527A0,stroke-width:2px,color:#311B92
-    classDef fileNode fill:#F5F5F5,stroke:#616161,stroke-width:1px,color:#212121
+flowchart LR
+    %% ── Styles ───────────────────────────────────────────────
+    classDef client fill:#EFF6FF,stroke:#3B82F6,color:#1E3A8A,stroke-width:1.5px
+    classDef gateway fill:#F0FDFA,stroke:#14B8A6,color:#134E4A,stroke-width:1.5px
+    classDef service fill:#FFF7ED,stroke:#F97316,color:#7C2D12,stroke-width:1.5px
+    classDef model fill:#F5F3FF,stroke:#8B5CF6,color:#4C1D95,stroke-width:1.5px
+    classDef storage fill:#FDF2F8,stroke:#EC4899,color:#831843,stroke-width:1.5px
+    classDef success fill:#F0FDF4,stroke:#22C55E,color:#14532D,stroke-width:2px
+    classDef utility fill:#F8FAFC,stroke:#94A3B8,color:#334155,stroke-width:1px,stroke-dasharray:4 3
 
-    subgraph ClientZone["用戶端"]
-        U["REST Client"]:::userNode
-        LU["LINE 使用者"]:::userNode
+    %% ── Entry points ─────────────────────────────────────────
+    subgraph CLIENTS["Clients"]
+        direction TB
+        REST["REST / Swagger"]:::client
+        USER["LINE User"]:::client
     end
 
-    subgraph LineZone["LINE Cloud"]
-        LP["LINE Platform"]:::lineNode
+    subgraph EDGE["Public Edge"]
+        direction TB
+        LINE["LINE Platform"]:::gateway
+        TUNNEL["Cloudflare Tunnel"]:::gateway
     end
 
-    subgraph ServerZone["Application Server　(Docker Compose)"]
-        API["FastAPI\n:8000"]:::appNode
-        ST["sentence-\ntransformers"]:::mlNode
-        PG[("PostgreSQL\n+ pgvector")]:::dbNode
-        REDIS[("Redis Stack\nSemantic Cache")]:::dbNode
-        ADM["Adminer\n:8080"]:::appNode
-        RI["RedisInsight\n:5540"]:::appNode
-        CF["cloudflared\n(HTTPS Tunnel)"]:::appNode
-        INIT["init service\n(init_db + ingest)"]:::appNode
+    %% ── Shared RAG request path ───────────────────────────────
+    subgraph APP["RAG Application · Docker Compose"]
+        direction LR
+        API["FastAPI<br/>/chat · /retrieve · /line/callback"]:::service
+        CHAT["Shared Answer Service"]:::service
+        EMBED["sentence-transformers<br/>384-d embedding"]:::model
+        CACHE[("Redis Stack<br/>Semantic Cache")]:::storage
+        PG[("PostgreSQL<br/>pgvector Knowledge Base")]:::storage
+        STORE["Store Cache · TTL"]:::service
+        ANSWER(["Return Answer"]):::success
+
+        API -->|"/chat · LINE"| CHAT --> EMBED -->|"1 · Cache lookup"| CACHE
+        API -.->|"/retrieve · direct search"| PG
+        CACHE -->|"Hit"| ANSWER
+        CACHE -->|"Miss · 2"| PG
     end
 
-    OAI["OpenAI\nAPI"]:::mlNode
-    CFS["Cloudflare\nServers"]:::lineNode
+    OPENAI["OpenAI<br/>Responses API"]:::model
 
-    DOCS["documents/\n.txt .md .pdf"]:::fileNode --> INIT
-    INIT -->|generate embedding| ST
-    INIT -->|store chunks + vectors| PG
-    CF -->|outbound tunnel| CFS
-    CFS -->|HTTPS traffic| CF
-    CF --> API
+    REST -->|"POST /chat · /retrieve"| API
+    USER --> LINE --> TUNNEL -->|"POST /line/callback"| API
+    PG -->|"3 · Top-K context"| OPENAI
+    OPENAI -->|"4 · Generated answer"| STORE --> ANSWER
+    STORE -.->|"5 · Write"| CACHE
 
-    U -->|"POST /chat · /retrieve"| API
-    LU -->|"傳訊息"| LP
-    LP -->|"POST /line/callback"| API
+    %% ── Offline ingestion ─────────────────────────────────────
+    subgraph INGESTION["Document Ingestion"]
+        direction LR
+        DOCS["documents/<br/>PDF · Markdown · Text"]:::utility
+        INIT["init + ingest"]:::utility
+        DOC_EMBED["Chunk + Embed"]:::utility
+        DOCS --> INIT --> DOC_EMBED
+    end
 
-    API -->|generate query embedding| ST
-    API -->|semantic cache lookup| REDIS
-    REDIS -->|cache hit: answer| API
-    API -->|cache miss: vector search| PG
-    PG -->|top-K chunks| API
-    API -->|prompt + context| OAI
-    OAI -->|answer| API
-    API -->|store answer + vector + TTL| REDIS
-    API -->|"reply"| LP
+    DOC_EMBED -->|"Store chunks + vectors"| PG
 
-    ADM -. "browse" .-> PG
-    RI -. "browse" .-> REDIS
+    %% ── Optional admin tools ──────────────────────────────────
+    ADMINER["Adminer · :8080"]:::utility -.-> PG
+    INSIGHT["RedisInsight · :5540"]:::utility -.-> CACHE
+
+    style CLIENTS fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px
+    style EDGE fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px
+    style APP fill:#FFFBEB,stroke:#FCD34D,stroke-width:1px
+    style INGESTION fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px
 ```
 
 ## Features
