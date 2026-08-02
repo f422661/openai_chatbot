@@ -1,16 +1,17 @@
 from sqlalchemy import text
 
+from config import EMBEDDING_DIM
 from db import engine
 
 
 def init_db() -> None:
     statements = [
         "CREATE EXTENSION IF NOT EXISTS vector",
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS document_chunks (
             id BIGSERIAL PRIMARY KEY,
             content TEXT NOT NULL,
-            embedding vector(384) NOT NULL
+            embedding vector({EMBEDDING_DIM}) NOT NULL
         )
         """,
         """

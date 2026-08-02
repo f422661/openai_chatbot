@@ -2,7 +2,7 @@ from functools import lru_cache
 
 from sentence_transformers import SentenceTransformer
 
-from config import EMBEDDING_MODEL
+from config import EMBEDDING_DIM, EMBEDDING_MODEL
 
 
 @lru_cache(maxsize=1)
@@ -16,4 +16,9 @@ def embed_text(text: str) -> list[float]:
         normalize_embeddings=True,
         convert_to_numpy=True,
     )[0]
+    if embedding.shape != (EMBEDDING_DIM,):
+        raise ValueError(
+            f"Embedding dimension mismatch: expected {EMBEDDING_DIM}, "
+            f"got {embedding.shape[0]}"
+        )
     return embedding.tolist()
