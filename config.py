@@ -10,6 +10,14 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://rag_user:rag_password@localhost:5432/rag_db",
 )
+# Railway exposes a generic postgresql:// URL. Select the installed psycopg v3
+# driver explicitly while leaving already-qualified SQLAlchemy URLs unchanged.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace(
+        "postgresql://", "postgresql+psycopg://", 1
+    )
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 EMBEDDING_MODEL = os.getenv(

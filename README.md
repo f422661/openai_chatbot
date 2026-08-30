@@ -261,6 +261,69 @@ Redis UI:  http://127.0.0.1:5540
 HTTPS:     https://abc-def-123.trycloudflare.com  (從 logs 取得)
 ```
 
+## Deploy to Railway
+
+Railway 會自動偵測根目錄的 `Dockerfile`，並使用 `railway.json` 的 `/health`
+健康檢查。容器會監聽 Railway 注入的 `PORT`，本機仍預設使用 `8000`。
+
+### 1. 建立服務
+
+1. 在 Railway 建立 Project，加入這個 GitHub repository。
+2. 從 Railway Template Marketplace 部署 **pgvector PostgreSQL**。不要使用標準
+   PostgreSQL，因為標準 image 不包含 pgvector extension。
+3. 若要保留語意快取，部署支援 RediSearch/RedisJSON 的 **Redis Stack** image
+   (`redis/redis-stack-server`)；Railway 的標準 Redis 不支援此專案使用的 `FT.*`
+   指令。若使用標準 Redis，聊天與 RAG 仍能運作，但 semantic cache 會自動略過。
+
+### 2. 設定 API service variables
+
+在 API service 的 **Variables** 加入：
+
+```env
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4o-mini
+EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+EMBEDDING_DIM=384
+TOP_K=5
+DOCUMENTS_DIR=documents
+CACHE_TTL=86400
+SIMILARITY_THRESHOLD=0.92
+DEBUG_VECTOR_LOGS=false
+LINE_CHANNEL_SECRET=your-line-channel-secret
+LINE_CHANNEL_ACCESS_TOKEN=your-line-channel-access-token
+```
+
+`Postgres` 與 `Redis` 必須改成 Railway canvas 上實際的 service 名稱。若暫時不使用
+LINE Bot，可省略兩個 `LINE_*` 變數。
+
+### 3. 初始化並匯入文件
+
+第一次部署後，在 API service 使用 Railway Shell 執行：
+
+```bash
+python init_db.py
+python ingest.py
+```
+
+`ingest.py` 會先清空 `document_chunks` 再重新匯入，因此不要把它設為每次部署都執行
+的 pre-deploy command。只有在 `documents/` 或 embedding 設定變更時才需再執行。
+
+### 4. 建立公開網址
+
+在 API service 的 **Settings → Networking** 產生 Railway domain，並確認：
+
+```text
+https://your-service.up.railway.app/health
+https://your-service.up.railway.app/docs
+```
+
+LINE Developers 的 Webhook URL 設成：
+
+```text
+https://your-service.up.railway.app/line/callback
+```
 
 Inside Docker Compose, the API connects to PostgreSQL through:
 
