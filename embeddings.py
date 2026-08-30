@@ -20,3 +20,4 @@ def embed_text(text: str) -> list[float]:
             f"got {len(embedding)}"
         )
     return embedding
+
