@@ -1,6 +1,6 @@
 # Simple RAG API
 
-一個最小可用的 RAG backend 範例，使用 FastAPI、PostgreSQL + pgvector、sentence-transformers 與 OpenAI Responses API，並整合 LINE Messaging API 機器人。
+一個最小可用的 RAG backend 範例，使用 FastAPI、PostgreSQL + pgvector、OpenAI Embeddings 與 Responses API，並整合 LINE Messaging API 機器人。
 
 ## 系統架構
 
@@ -93,7 +93,7 @@ flowchart TB
 - `POST /chat` 問答 API
 - `POST /retrieve` 顯示最相近的 RAG chunks，不呼叫 OpenAI
 - `POST /line/callback` LINE Bot webhook，接收訊息並回覆 RAG 答案
-- 使用 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` 產生 384 維 embedding
+- 使用 `text-embedding-3-small` 產生 384 維 embedding
 - 使用 PostgreSQL + pgvector 做相似度搜尋
 - 使用 Redis Stack (Vector Search) 提供語意快取 (Semantic Cache)，降低 API 延遲與 Token 費用
 - 使用 OpenAI Responses API 產生回答
@@ -108,7 +108,7 @@ simple-rag-api/
 ├── app.py                 # FastAPI app、/chat、/retrieve、/line/callback
 ├── config.py              # Environment variable settings
 ├── db.py                  # Database connection and vector search helper
-├── embeddings.py          # sentence-transformers embedding helper
+├── embeddings.py          # OpenAI embedding helper
 ├── prompt_loader.py       # Load and cache prompt files
 ├── semantic_cache.py      # Redis vector semantic cache module
 ├── schemas.py             # Pydantic request/response data models
@@ -168,7 +168,7 @@ Edit `.env`：
 DATABASE_URL=postgresql+psycopg://rag_user:rag_password@localhost:5432/rag_db
 OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIM=384
 TOP_K=5
 LINE_CHANNEL_SECRET=your-line-channel-secret
@@ -284,7 +284,7 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 REDIS_URL=${{Redis.REDIS_URL}}
 OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIM=384
 TOP_K=5
 DOCUMENTS_DIR=documents
@@ -433,7 +433,7 @@ Example response:
 
 ```json
 {
-  "answer": "這個 API 使用 FastAPI、PostgreSQL pgvector、sentence-transformers 和 OpenAI Responses API。",
+  "answer": "這個 API 使用 FastAPI、PostgreSQL pgvector、OpenAI Embeddings 和 Responses API。",
   "context": [
     "Simple RAG API 是一個使用 FastAPI、PostgreSQL pgvector..."
   ]

@@ -22,7 +22,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 EMBEDDING_MODEL = os.getenv(
     "EMBEDDING_MODEL",
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "text-embedding-3-small",
 )
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
 TOP_K = int(os.getenv("TOP_K", "5"))

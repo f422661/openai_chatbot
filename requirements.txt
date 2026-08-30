@@ -3,11 +3,9 @@ uvicorn
 openai
 sqlalchemy
 psycopg[binary]
-sentence-transformers
 python-dotenv
 pydantic
 pypdf
 line-bot-sdk>=3.0.0
 redis
 numpy
-
